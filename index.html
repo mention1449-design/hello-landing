@@ -41,6 +41,30 @@
   .stat-num{font-size:20px;font-weight:500;color:#fff}
   .stat-label{font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px}
   .empty-state{text-align:center;padding:2rem;color:rgba(255,255,255,0.3);font-size:13px;grid-column:1/-1}
+
+  /* ── 댓글 섹션 ── */
+  .comment-section{padding:2rem;border-top:0.5px solid rgba(255,255,255,0.08);margin-top:1rem}
+  .comment-form{background:#1a1a1a;border-radius:10px;padding:1.25rem;margin-bottom:1.5rem;display:flex;flex-direction:column;gap:10px}
+  .comment-row{display:flex;gap:10px}
+  .comment-input{background:#111;border:0.5px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;font-size:13px;color:#fff;outline:none;font-family:inherit;transition:border-color 0.15s;width:100%}
+  .comment-input::placeholder{color:rgba(255,255,255,0.3)}
+  .comment-input:focus{border-color:rgba(0,213,100,0.5)}
+  .input-nickname{width:140px!important;flex-shrink:0}
+  .input-content{flex:1}
+  textarea.comment-input{resize:none;height:70px;line-height:1.5}
+  .comment-submit{align-self:flex-end;background:#00d564;color:#003a1a;border:none;border-radius:8px;padding:9px 20px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:opacity 0.15s}
+  .comment-submit:hover{opacity:0.85}
+  .comment-submit:disabled{opacity:0.4;cursor:not-allowed}
+  .comment-list{display:flex;flex-direction:column;gap:12px}
+  .comment-item{background:#1a1a1a;border-radius:8px;padding:1rem 1.25rem}
+  .comment-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .comment-nickname{font-size:13px;font-weight:500;color:#00d564}
+  .comment-date{font-size:11px;color:rgba(255,255,255,0.3)}
+  .comment-content{font-size:13px;color:rgba(255,255,255,0.8);line-height:1.6;word-break:break-all}
+  .comment-empty{text-align:center;padding:2rem;color:rgba(255,255,255,0.3);font-size:13px}
+  .comment-error{font-size:12px;color:#ff6b6b;padding:4px 0}
+  .comment-loading{text-align:center;padding:1.5rem;color:rgba(255,255,255,0.3);font-size:13px}
+
   .footer{padding:2rem;border-top:0.5px solid rgba(255,255,255,0.06);font-size:12px;color:rgba(255,255,255,0.2);text-align:center}
   @media(max-width:480px){
     .header{padding:1rem}
@@ -49,6 +73,9 @@
     .filter-chips{padding:0.75rem 1rem 0}
     .stats{margin:1rem}
     .grid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:8px}
+    .comment-section{padding:1.5rem 1rem}
+    .comment-row{flex-direction:column}
+    .input-nickname{width:100%!important}
   }
 </style>
 </head>
@@ -88,15 +115,32 @@
   <div class="grid" id="all-grid"></div>
 </div>
 
+<!-- 댓글 섹션 -->
+<div class="comment-section">
+  <div class="section-title">댓글</div>
+  <div class="comment-form">
+    <div class="comment-row">
+      <input class="comment-input input-nickname" id="c-nickname" placeholder="닉네임" maxlength="20">
+      <input class="comment-input input-content" id="c-content-inline" placeholder="짧은 한마디..." maxlength="100" onkeydown="if(event.key==='Enter')submitComment()">
+    </div>
+    <textarea class="comment-input" id="c-content" placeholder="더 길게 쓰려면 여기에 (선택)" maxlength="500"></textarea>
+    <div id="c-error" class="comment-error" style="display:none"></div>
+    <button class="comment-submit" id="c-submit" onclick="submitComment()">등록</button>
+  </div>
+  <div id="comment-list" class="comment-list">
+    <div class="comment-loading">댓글 불러오는 중...</div>
+  </div>
+</div>
+
 <div class="footer">네이버 웹툰 북마크 페이지 · 개인용</div>
 
 <script>
   /* =====================================================
    * 웹툰 데이터 — 여기서 직접 추가/수정하세요
-   * day: '월' | '화' | '수' | '목' | '금' | '토' | '일' | '완결'
-   * new: true  → NEW 뱃지 표시
-   * unread: 숫자 → 미열람 에피소드 수 (0이면 뱃지 없음)
-   * color: 썸네일 배경 색상 (이미지 없을 때)
+   * day: '월'|'화'|'수'|'목'|'금'|'토'|'일'|'완결'
+   * new: true  → NEW 뱃지
+   * unread: 숫자 → 미열람 에피소드 수
+   * color: 썸네일 배경 색상
    * url: 클릭 시 이동할 네이버 웹툰 링크
    ===================================================== */
   const webtoons = [
@@ -114,96 +158,153 @@
     {title:"덴마",            author:"양영순",     day:"목", emoji:"🤖", new:false, unread:2, color:"#0a1a2e", url:"https://comic.naver.com/webtoon/list?titleId=119874"},
   ];
 
-  /* =====================================================
-   * localStorage로 미열람 상태 저장
-   ===================================================== */
+  /* ─ localStorage 미열람 상태 저장 ─ */
   function loadUnread() {
     try {
       const saved = JSON.parse(localStorage.getItem('webtoon_unread') || '{}');
-      webtoons.forEach(w => {
-        if (saved[w.title] !== undefined) w.unread = saved[w.title];
-      });
+      webtoons.forEach(w => { if (saved[w.title] !== undefined) w.unread = saved[w.title]; });
     } catch(e) {}
   }
-
   function saveUnread() {
     const data = {};
     webtoons.forEach(w => data[w.title] = w.unread);
     try { localStorage.setItem('webtoon_unread', JSON.stringify(data)); } catch(e) {}
   }
 
-  /* =====================================================
-   * 오늘 요일 계산
-   ===================================================== */
+  /* ─ 오늘 요일 ─ */
   const DAYS = ['일','월','화','수','목','금','토'];
   const TODAY = DAYS[new Date().getDay()];
-
   document.getElementById('update-time').textContent =
     new Date().toLocaleDateString('ko-KR', {month:'long', day:'numeric', weekday:'short'});
 
-  /* =====================================================
-   * 카드 렌더링
-   ===================================================== */
+  /* ─ 카드 렌더링 ─ */
   function makeCard(w) {
-    const badge = w.new
-      ? `<div class="badge-new">NEW</div>`
-      : w.unread > 0 ? `<div class="badge-up">${w.unread}</div>` : '';
-    return `<div class="card" onclick="openWebtoon('${w.title}')">
-      <div class="thumb" style="background:${w.color}">
-        <div class="thumb-img">${w.emoji}</div>
-        ${badge}
-        <div class="card-overlay"><button class="overlay-btn">바로 읽기</button></div>
-      </div>
-      <div class="card-info">
-        <div class="card-title">${w.title}</div>
-        <div class="card-author">${w.author}</div>
-        <div class="card-day">${w.day === '완결' ? '완결' : w.day + '요일'}</div>
-      </div>
-    </div>`;
+    const badge = w.new ? '<div class="badge-new">NEW</div>'
+      : w.unread > 0 ? '<div class="badge-up">'+w.unread+'</div>' : '';
+    return '<div class="card" onclick="openWebtoon(\''+w.title+'\')"><div class="thumb" style="background:'+w.color+'"><div class="thumb-img">'+w.emoji+'</div>'+badge+'<div class="card-overlay"><button class="overlay-btn">바로 읽기</button></div></div><div class="card-info"><div class="card-title">'+w.title+'</div><div class="card-author">'+w.author+'</div><div class="card-day">'+(w.day==='완결'?'완결':w.day+'요일')+'</div></div></div>';
   }
-
   function render(data) {
     const todayList = data.filter(w => w.day === TODAY);
     document.getElementById('today-grid').innerHTML =
       todayList.length ? todayList.map(makeCard).join('') : '<div class="empty-state">오늘 업데이트가 없어요</div>';
     document.getElementById('all-grid').innerHTML =
       data.length ? data.map(makeCard).join('') : '<div class="empty-state">검색 결과가 없어요</div>';
-
     document.getElementById('total-count').textContent = webtoons.length;
     document.getElementById('today-count').textContent = webtoons.filter(w => w.day === TODAY).length;
     document.getElementById('unread-count').textContent = webtoons.reduce((a, w) => a + w.unread, 0);
   }
 
   let activeDay = 'all';
-
   function filterByDay(day, btn) {
     activeDay = day;
     document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
     filterCards();
   }
-
   function filterCards() {
     const q = document.getElementById('search').value.toLowerCase();
     let filtered = webtoons;
     if (activeDay !== 'all') filtered = filtered.filter(w => w.day === activeDay);
-    if (q) filtered = filtered.filter(w =>
-      w.title.toLowerCase().includes(q) || w.author.toLowerCase().includes(q));
+    if (q) filtered = filtered.filter(w => w.title.toLowerCase().includes(q) || w.author.toLowerCase().includes(q));
     render(filtered);
   }
-
   function openWebtoon(title) {
     const w = webtoons.find(x => x.title === title);
     if (!w) return;
-    w.unread = 0;
-    w.new = false;
-    saveUnread();
-    filterCards();
+    w.unread = 0; w.new = false;
+    saveUnread(); filterCards();
     if (w.url) window.open(w.url, '_blank');
   }
 
   loadUnread();
   filterCards();
+
+  /* =====================================================
+   * Supabase 댓글 기능
+   ===================================================== */
+  const SB_URL = 'https://mvwrsofhikdaryskqccu.supabase.co';
+  const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12d3Jzb2ZoaWtkYXJ5c2txY2N1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNDk5MzEsImV4cCI6MjA5MTgyNTkzMX0.0JpAB5TjXP7yLcJuHvKK5MqTY7b6DvvFi4Yr_r_B41M';
+  const SB_HEADERS = {
+    'Content-Type': 'application/json',
+    'apikey': SB_KEY,
+    'Authorization': 'Bearer ' + SB_KEY
+  };
+
+  async function fetchComments() {
+    const list = document.getElementById('comment-list');
+    try {
+      const res = await fetch(SB_URL + '/rest/v1/comments?select=*&order=created_at.desc', { headers: SB_HEADERS });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      renderComments(await res.json());
+    } catch(e) {
+      list.innerHTML = '<div class="comment-empty">댓글을 불러오지 못했어요 (' + e.message + ')</div>';
+    }
+  }
+
+  function renderComments(data) {
+    const list = document.getElementById('comment-list');
+    if (!data.length) {
+      list.innerHTML = '<div class="comment-empty">첫 댓글을 남겨보세요!</div>';
+      return;
+    }
+    list.innerHTML = data.map(function(c) {
+      const date = new Date(c.created_at).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+      const nick = c.nickname.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const body = c.content.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+      return '<div class="comment-item">'
+        + '<div class="comment-header">'
+        + '<span class="comment-nickname">' + nick + '</span>'
+        + '<span class="comment-date">' + date + '</span>'
+        + '</div>'
+        + '<div class="comment-content">' + body + '</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  async function submitComment() {
+    const nickname = document.getElementById('c-nickname').value.trim();
+    const inline   = document.getElementById('c-content-inline').value.trim();
+    const long     = document.getElementById('c-content').value.trim();
+    const content  = long || inline;
+    const errEl    = document.getElementById('c-error');
+    const btn      = document.getElementById('c-submit');
+    errEl.style.display = 'none';
+
+    if (!nickname)            { showCError('닉네임을 입력해주세요.'); return; }
+    if (!content)             { showCError('댓글 내용을 입력해주세요.'); return; }
+    if (nickname.length > 20) { showCError('닉네임은 20자 이내로 입력해주세요.'); return; }
+    if (content.length > 500) { showCError('댓글은 500자 이내로 입력해주세요.'); return; }
+
+    btn.disabled = true;
+    btn.textContent = '등록 중...';
+    try {
+      const res = await fetch(SB_URL + '/rest/v1/comments', {
+        method: 'POST',
+        headers: Object.assign({}, SB_HEADERS, { 'Prefer': 'return=minimal' }),
+        body: JSON.stringify({ nickname: nickname, content: content })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(function(){ return {}; });
+        throw new Error(err.message || 'HTTP ' + res.status);
+      }
+      document.getElementById('c-content-inline').value = '';
+      document.getElementById('c-content').value = '';
+      await fetchComments();
+    } catch(e) {
+      showCError('등록 중 오류가 발생했어요: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '등록';
+    }
+  }
+
+  function showCError(msg) {
+    const el = document.getElementById('c-error');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  fetchComments();
 </script>
 </body>
 </html>
